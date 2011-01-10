@@ -116,7 +116,7 @@
   "Options controlling the behaviour of Wiki Mode.
 See `wiki-mode' for more information.")
 
-(defcustom wiki-directories 'default-wiki-directories
+(defcustom wiki-directories '(list (expand-file-name "~/Wiki/"))
   "List of directories where all wiki files are stored.
 The directories should contain fully expanded directory names and they
 should end with a slash on most systems, because each element in the
@@ -263,6 +263,14 @@ See `wiki-name-no-more' if highlighting is not removed correctly."
   :group 'wiki-link
   :type 'regexp)
 
+(defcustom wiki-file-name-regexp
+  "\\<[A-Z][a-z]+\\([A-Z][a-z]+\\)+\\(.[a-z]+\\)*\\>"
+  "Regexp matching Wiki File Names.
+Whenever the regexp is searched for, case is never ignored:
+`case-fold-search' will allways be bound to nil."
+  :group 'wiki-link
+  :type 'regexp)
+
 (defcustom wiki-name-no-more "[A-Za-z]+"
   "Regexp matching things that might once have been WikiNames.
 Usually that amounts to all legal characters in `wiki-name-regexp'.
@@ -316,13 +324,6 @@ possible value for `wiki-include-function'."
 (defsubst wiki-page-name ()
   "Return page name."
   (file-name-nondirectory buffer-file-name))
-
-
-(defun default-wiki-directories ()
-  " Returns the default list of wiki diectories. This starts with
-just the ~/Wiki/ in the users directory"
-  (list (expand-file-name "~/Wiki/")))
-
 
 (defun wiki-no-name-p ()
   "Return non-nil if point is within a URL.
@@ -478,12 +479,13 @@ qualified filename.  Use `wiki-existing-page-names' and
 Each element in the list is a cons cell.  The car holds the pagename,
 the cdr holds the fully qualified filename."
   (let ((dirs wiki-directories)
-	(regexp (concat "^" wiki-name-regexp "$"))
+	(regexp (concat "^" wiki-file-name-regexp "$"))
 	result)
     (setq dirs wiki-directories)
     (while dirs
       (let ((files (mapcar (lambda (f)
-			     (cons (file-name-nondirectory f) f))
+			     (cons (file-name-nondirectory
+				    (file-name-sans-extension f)) f))
 			   (directory-files (car dirs) t regexp t))))
 	(setq result (nconc files result)))
       (setq dirs (cdr dirs)))
@@ -499,6 +501,14 @@ This relies on `wiki-existing-names'."
   (cdr (assoc name (wiki-existing-names))))
 
 ;; Following hyperlinks
+(defun wiki-create-file-name (name)
+  " If a file doesn't exist create it with the correct
+extention. This is probably the extention of the file in the
+current buffer"
+  (let ((new-ext (file-name-extension (buffer-file-name))))
+    (if new-ext
+	(funcall wiki-follow-name-action (concat name "." new-ext))
+      (funcall wiki-follow-name-action name))))
 
 (defun wiki-follow-name (name)
   "Follow the link NAME by invoking `wiki-follow-name-action'.
@@ -507,7 +517,7 @@ then the corresponding filename is used instead of NAME."
   (let ((file (cdr (assoc name (wiki-existing-names)))))
     (if file
 	(funcall wiki-follow-name-action file)
-      (funcall wiki-follow-name-action name))))
+      (wiki-create-file-name name))))
 
 (defun wiki-follow-name-at-point ()
   "Find wiki name at point.
