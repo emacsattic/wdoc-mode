@@ -1,0 +1,114 @@
+#!/usr/bin/env python
+"""
+The whole point of this module is to take an asciidoc file with wdoc
+(wiki) markup and output reasonable html in a straitforward way. It
+should only make links out of wiki words if a document exists for that
+link.
+"""
+
+from optparse import OptionParser
+import os
+import re
+import sys
+import tempfile
+
+def resolve_link(wdir, word):
+    """ If something looks like it might be a wdoc link, check to see
+    if a file exists that matches that link.  if so then go aheand and
+    produces asciidoc mark up to mirror the link, otherwise do
+    nothing"""
+
+    wfile = os.path.join(wdir,"%s.adoc" % word)
+    if os.path.isfile(wfile):
+        return "link:%s.html[%s]" % (word, word)
+    else:
+        return word
+
+def process_line(line, wdir, wre):
+    """ Check each word of a line in the file to see if it is a wdoc
+    link """
+    new_line = []
+    for word in line.split():
+        if wre.match(word):
+            new_line.append(resolve_link(wdir, word))
+        else:
+            new_line.append(word)
+    return " ".join(new_line)
+
+def postprocess_file(backend, converted, destination):
+    """ Run asciidoc on a file that has been appropriatly preprocessed
+    by wdoc """
+    cmd = "asciidoc -b %s -o %s %s" % (backend, destination, converted)
+    print cmd
+    return os.system(cmd)
+
+def process_file(src, tmpdir, wdoc_dir, destination, backend, wre):
+    """ Do the wdoc preprocessing on links and output the actually
+    asciidoc result """
+    base_file_name = os.path.basename(src)
+    (root_name, _) = os.path.splitext(base_file_name)
+    tmpf = os.path.join(tmpdir, base_file_name)
+    destf = os.path.join(destination, "%s.%s" %(root_name, backend))
+    with open(src, "r") as f:
+        with open(tmpf, "w") as t:
+            for line in f:
+                new_line = process_line(line, wdoc_dir, wre)
+                t.write(new_line + "\n")
+
+    return postprocess_file(backend, tmpf, destf)
+
+
+def process_directory(src, tmpdir, wdoc_dir, destination, backend, wre):
+    """ Process every asciidoc file in a directory """
+
+    for filename in os.listdir(src):
+        if filename.endswith(".adoc") or filename.endswith(".asciidoc"):
+            nsrc = os.path.join(src, filename)
+            result = process_file(nsrc, tmpdir, wdoc_dir,
+                                  destination, backend, wre)
+
+            if result != 0:
+                return result
+
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
+
+        parser = OptionParser()
+        parser.add_option("-t", "--tmpdir", dest="tmpdir",
+                          default = tempfile.mkdtemp(prefix='wdoc2adoc'),
+                          help = "The tmp dir to make use of", metavar="FILE")
+
+        parser.add_option("-d", "--destination", dest="dest",
+                          help = "The destination directory", metavar="FILE")
+
+        parser.add_option("-w", "--wdoc-dir", dest="wdir",
+                          help = "The root of the documentation dir",
+                          metavar="FILE")
+
+        parser.add_option("-b", "--backend", dest="backend", default = "html",
+                          help = "The asciidoc backend to make use of")
+
+        # This mirrors the default emacs wdoc minor mode regexp. If you customize
+        # that regexp you should customize this one.
+        parser.add_option("-r", "--re", dest="regexp",
+                          default = "^[A-Z][a-z]+([A-Z][a-z]+)+$",
+                          help = "The regexp used to find wikiwords")
+
+        (options, args) = parser.parse_args(argv)
+
+        wre = re.compile(options.regexp)
+        target = args[1]
+
+        if os.path.isdir(target):
+            return process_directory(target, options.tmpdir,
+                                     options.wdir, options.dest,
+                                     options.backend, wre)
+        else:
+            return process_file(target, options.tmpdir,
+                                options.wdir, options.dest,
+                                options.backend, wre)
+
+if __name__ == "__main__":
+    sys.exit(main())
