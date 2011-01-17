@@ -60,7 +60,7 @@ This string must be a valid argument to `format-time-string'."
   "Options controlling links in Wdoc Mode."
   :group 'wdoc)
 
-(defcustom wdoc-name-regexp "\\<[A-Z][a-z]+\\([A-Z][a-z]+\\)+\\>"
+(defcustom wdoc-name-regexp "\\<[A-Z]+[a-z]*\\([A-Z]+[a-z]*\\)+\\>"
   "Regexp matching WikiNames.
 Whenever the regexp is searched for, case is never ignored:
 `case-fold-search' will allways be bound to nil.
@@ -71,7 +71,7 @@ See `wdoc-name-no-more' if highlighting is not removed correctly."
   :type 'regexp)
 
 (defcustom wdoc-file-name-regexp
-  "\\<[A-Z][a-z]+\\([A-Z][a-z]+\\)+\\(.[a-z]+\\)*\\>"
+  "\\<[A-Z]+[a-z]*\\([A-Z]+[a-z]*\\)+\\(.[a-z]+\\)*\\>"
   "Regexp matching Wdoc File Names.
 Whenever the regexp is searched for, case is never ignored:
 `case-fold-search' will allways be bound to nil."
