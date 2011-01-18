@@ -11,6 +11,38 @@ import os
 import re
 import sys
 import tempfile
+import string
+
+LINE_RE = re.compile("^(\=)+$|^(\-)+$|^(\~)+$")
+SPACES = ("                                                            "
+          "                                                            "
+          "                                                            "
+          "                                                            "
+          "                                                            "
+          "                                                            ")
+def adjust_line(line, amount):
+    new_amount = amount + len(line)
+    return line.rjust(new_amount, line[0])[:new_amount]
+
+def find_first_ascii(word):
+    start = 0
+    for ch in word:
+        if ch in string.ascii_letters:
+            break
+        else:
+            start = start + 1
+
+    return start
+
+def strip_special_characters(word):
+    start = find_first_ascii(word)
+    # Reverse the word and find the first trailng
+    end = find_first_ascii(word[::-1])
+
+    wlen = len(word)
+    nend = wlen - end
+
+    return (word[0:start], word[nend:wlen], word[start:nend])
 
 def resolve_link(wdir, word):
     """ If something looks like it might be a wdoc link, check to see
@@ -29,11 +61,16 @@ def process_line(line, wdir, wre):
     link """
     new_line = []
     for word in line.split():
-        if wre.match(word):
-            new_line.append(resolve_link(wdir, word))
+        (pre, post, nword) = strip_special_characters(word)
+        if wre.match(nword):
+            new_line.append(resolve_link(wdir, nword) + post)
         else:
             new_line.append(word)
-    return " ".join(new_line)
+    pad = len(line) - len(line.lstrip())
+    result_line = SPACES[0:pad] + " ".join(new_line)
+
+    growth = len(result_line) - len(line)
+    return (growth, result_line)
 
 def postprocess_file(backend, converted, destination):
     """ Run asciidoc on a file that has been appropriatly preprocessed
@@ -49,10 +86,16 @@ def process_file(src, tmpdir, wdoc_dir, destination, backend, wre):
     (root_name, _) = os.path.splitext(base_file_name)
     tmpf = os.path.join(tmpdir, base_file_name)
     destf = os.path.join(destination, "%s.%s" %(root_name, backend))
+    growth = 0
     with open(src, "r") as f:
         with open(tmpf, "w") as t:
             for line in f:
-                new_line = process_line(line, wdoc_dir, wre)
+                if LINE_RE.match(line) and growth > 0:
+                    new_line = adjust_line(line, growth)
+                    growth = 0
+                else:
+                    (growth, new_line) = process_line(line, wdoc_dir, wre)
+
                 t.write(new_line + "\n")
 
     return postprocess_file(backend, tmpf, destf)
@@ -60,7 +103,6 @@ def process_file(src, tmpdir, wdoc_dir, destination, backend, wre):
 
 def process_directory(src, tmpdir, wdoc_dir, destination, backend, wre):
     """ Process every asciidoc file in a directory """
-
     for filename in os.listdir(src):
         if filename.endswith(".adoc") or filename.endswith(".asciidoc"):
             nsrc = os.path.join(src, filename)
@@ -93,10 +135,23 @@ def main(argv=None):
         # This mirrors the default emacs wdoc minor mode regexp. If you customize
         # that regexp you should customize this one.
         parser.add_option("-r", "--re", dest="regexp",
-                          default = "^[A-Z][a-z]+([A-Z][a-z]+)+$",
+                          default = "^[A-Z]+[a-z]*([A-Z]+[a-z]*)+$",
                           help = "The regexp used to find wikiwords")
 
         (options, args) = parser.parse_args(argv)
+
+        mandatory_args = ["dest", "wdir"]
+        for arg in mandatory_args:
+             if not options.__dict__.has_key(arg):
+                 print "mandatory option %s is missing\n" % arg
+                 parser.print_help()
+                 exit(-1)
+
+        if len(args) != 2:
+            print "You must specify the directory or file to run wdocs on"
+            parser.print_help()
+            exit(-1)
+
 
         wre = re.compile(options.regexp)
         target = args[1]
